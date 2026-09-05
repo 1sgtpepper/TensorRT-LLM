@@ -1,0 +1,169 @@
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# Dependencies of the published 17803f6 native/Python build; binary-only preflight.
+accelerate>=1.7.0
+build
+colored
+cuda-python>=13
+diffusers<0.40,>=0.39.0
+ftfy
+lark
+lazy_loader~=0.5
+mpi4py
+numpy<2.4,>=2.0.0
+graphviz
+openai
+polygraphy
+psutil
+nvidia-ml-py>=13
+pulp
+pandas
+h5py==3.12.1
+StrEnum
+sentencepiece>=0.1.99
+torch<=2.13.0a0,>=2.12.0a0
+torchvision
+nvidia-nccl-cu13<=2.30.4,>=2.29.7
+nccl4py<0.4,>=0.3.1
+nvidia-cuda-nvrtc
+transformers==5.5.4
+prometheus_client
+prometheus_fastapi_instrumentator>=8.1.0
+pydantic>=2.9.1
+pydantic-settings[yaml]
+msgspec
+omegaconf
+pillow
+PyNvVideoCodec~=2.1.0
+optimum
+datasets==3.1.0
+evaluate
+mpmath>=1.3.0
+click<8.4,>=8.3.1
+click_option_group>=0.5.3
+aenum
+pyzmq
+fastapi>=0.136.3
+starlette>=1.3.1
+uvicorn
+setuptools<80
+packaging>=24.2
+ordered-set
+peft<0.19.0,>=0.18.1
+patchelf
+einops
+flashinfer-python==0.6.18
+xgrammar==0.1.32
+llguidance==0.7.29
+jsonschema
+backoff
+nvtx
+matplotlib
+meson
+ninja
+blake3
+soundfile
+triton==3.7.0
+xdsl>=0.59.0
+tiktoken
+blobfile
+openai-harmony==0.0.4
+nvidia-cutlass-dsl[cu13]==4.6.2; python_version >= "3.10"
+nvidia-matmul-heuristics==0.1.0.27; python_version >= "3.10"
+quack-kernels==0.6.4; python_version >= "3.10"
+jinja2
+plotly
+numexpr
+partial_json_parser
+mcp<2.0.0
+apache-tvm-ffi==0.1.13.post2
+torch-c-dlpack-ext==0.1.3
+flash-attn-4==4.0.0b19
+mistral-common>=1.10.0
+torchao<0.16.0,>=0.14.1
+cuda-core
+llist
+cuda-tile>=1.0.1
+nvidia-cuda-tileiras<13.2,>=13.1
+etcd-sdk-python==0.0.7
+protobuf>=5.27.2
+python-multipart
+cache-dit>=1.3.5
+librosa
+msgpack
+uvloop>=0.19.0
+nvidia-cutlass-dsl==4.6.2
+quack-kernels==0.6.4
+protobuf<7,>=6.30.2
+mistune>=3.3.0
+notebook>=7.5.6
+jupyter_server>=2.20.0
+soupsieve>=2.8.4
+tornado>=6.5.6
+gitpython>=3.1.55
+jupyterlab>=4.5.10
+diffusers==0.39.0; extra == "devel"
+distro==1.9.0; extra == "devel"
+pyyaml<6.0.3,>=6.0.1; extra == "devel"
+requests<3,>=2.32.4; extra == "devel"
+boto3; extra == "devel"
+einops; extra == "devel"
+flash-linear-attention==0.5.2; extra == "devel"
+lpips; extra == "devel"
+graphviz; extra == "devel"
+mypy==1.19.1; extra == "devel"
+mako; extra == "devel"
+oyaml; extra == "devel"
+parameterized; extra == "devel"
+pre-commit; extra == "devel"
+pybind11; extra == "devel"
+pybind11-stubgen; extra == "devel"
+pytest<9.1,>=8.4; extra == "devel"
+pytest-asyncio; extra == "devel"
+pytest-cov; extra == "devel"
+pytest-csv; extra == "devel"
+pytest-env; extra == "devel"
+pytest-forked; extra == "devel"
+pytest-xdist; extra == "devel"
+pytest-timeout; extra == "devel"
+pytest-split; extra == "devel"
+pytest-mock; extra == "devel"
+pytest-threadleak; extra == "devel"
+pytest-unused-fixtures; extra == "devel"
+rouge_score; extra == "devel"
+cloudpickle; extra == "devel"
+typeguard==4.4.4; extra == "devel"
+typing-extensions==4.15.0; extra == "devel"
+bandit==1.7.7; extra == "devel"
+jsonlines==4.0.0; extra == "devel"
+jieba==0.42.1; extra == "devel"
+rouge==1.0.1; extra == "devel"
+pytest-rerunfailures; extra == "devel"
+ruff==0.9.4; extra == "devel"
+lm_eval[api]==0.4.10; extra == "devel"
+docstring_parser; extra == "devel"
+genai-perf==0.0.13; extra == "devel"
+opentelemetry-sdk>=1.26.0; extra == "devel"
+opentelemetry-api>=1.26.0; extra == "devel"
+opentelemetry-exporter-otlp>=1.26.0; extra == "devel"
+opentelemetry-semantic-conventions-ai>=0.4.1; extra == "devel"
+rapidfuzz==3.14.5; extra == "devel"
+aiperf==0.8.0; extra == "devel"
+nanobind>=2.9.0; extra == "devel"
+nixl-cu13==1.4.0; extra == "devel"
+cupti-python<13.2,>=13.0; extra == "devel"
+nvidia-cuda-cupti<13.2,>=13.0; extra == "devel"
+cxxfilt; extra == "devel"
+hf-transfer==0.1.9; extra == "devel"
+line_profiler; extra == "devel"
+numpy-typing-compat!=20260602.2.5; extra == "devel"
+smg-grpc-proto>=0.4.2; extra == "devel"
+openengine-openengine-grpc-python==1.67.1.2.20260730172104+768a93c7b44e; extra == "openengine"
+openengine-openengine-protocolbuffers-python==31.1.0.2.20260730172104+768a93c7b44e; extra == "openengine"
+openengine-openengine-protocolbuffers-pyi==31.1.0.2.20260730172104+768a93c7b44e; extra == "openengine"
+grpcio<2,>=1.67.1; extra == "openengine"
+protobuf<7,>=6.31.1; extra == "openengine"
+modelexpress<0.6.0,>=0.4.1; extra == "mx"
+smg-grpc-proto>=0.4.2; extra == "grpc-smg"
+torch==2.12.0+cu130
+pytest
