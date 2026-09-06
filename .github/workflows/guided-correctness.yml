@@ -14,7 +14,12 @@
 name: Validate guided decoding components
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [validation/guided-decoding-correctness]
+    paths:
+      - .github/workflows/guided-correctness.yml
+      - .github/test_guided_recompute.py
+      - .github/test_guided_tree.py
 
 permissions:
   contents: read
