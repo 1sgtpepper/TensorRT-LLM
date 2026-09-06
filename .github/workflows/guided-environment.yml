@@ -81,6 +81,23 @@ jobs:
             --link-mode hardlink -r environment.txt 2>&1 | tee evidence/install.log
           uv pip install --python "$RUNNER_TEMP/published-env/bin/python" --no-deps \
             --link-mode hardlink published-wheel/*.whl 2>&1 | tee evidence/native-install.log
+          uv pip install --python "$RUNNER_TEMP/published-env/bin/python" --only-binary :all: \
+            --default-index https://pypi.org/simple --link-mode hardlink 'cuda-toolkit[nvcc]==13.0.2'
+          "$RUNNER_TEMP/published-env/bin/python" - <<'PY'
+          import importlib.metadata
+          import os
+          from pathlib import Path
+          import subprocess
+
+          distribution = importlib.metadata.distribution("nvidia-cuda-nvcc")
+          executables = [distribution.locate_file(path) for path in distribution.files
+                         if path.name == "nvcc"]
+          assert len(executables) == 1, executables
+          executable = Path(executables[0]).resolve()
+          subprocess.run([str(executable), "--version"], check=True)
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              output.write(f"CUDA_HOME={executable.parent.parent}\n")
+          PY
           uv pip check --python "$RUNNER_TEMP/published-env/bin/python" 2>&1 | tee evidence/dependency-check.log
           uv pip freeze --python "$RUNNER_TEMP/published-env/bin/python" > evidence/runtime-packages.txt
       - name: Supply the genuine driver libraries for CPU import
