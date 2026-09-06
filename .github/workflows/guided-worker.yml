@@ -33,6 +33,8 @@ jobs:
       CUDA_MODULE_LOADING: LAZY
       MAX_JOBS: "1"
       OMP_NUM_THREADS: "1"
+      CC: /usr/bin/gcc-15
+      CXX: /usr/bin/g++-15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,6 +87,7 @@ jobs:
           uv pip check --python "$(command -v python)" 2>&1 | tee evidence/dependency-check.log
           uv pip freeze --python "$(command -v python)" > evidence/runtime-packages.txt
           nvidia-smi --query-gpu=name,compute_cap,driver_version,memory.total,memory.free --format=csv > evidence/device.txt
+          "$CXX" --version > evidence/host-compiler.txt
       - name: Exercise real worker with ample and constrained KV capacity
         run: |
           set -o pipefail
