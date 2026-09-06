@@ -83,6 +83,15 @@ jobs:
             --link-mode hardlink published-wheel/*.whl 2>&1 | tee evidence/native-install.log
           uv pip check --python "$RUNNER_TEMP/published-env/bin/python" 2>&1 | tee evidence/dependency-check.log
           uv pip freeze --python "$RUNNER_TEMP/published-env/bin/python" > evidence/runtime-packages.txt
+      - name: Supply the genuine driver libraries for CPU import
+        run: |
+          mkdir -p "$RUNNER_TEMP/driver-package"
+          cd "$RUNNER_TEMP/driver-package"
+          apt-get download libnvidia-compute-580
+          sha256sum ./*.deb > "$GITHUB_WORKSPACE/evidence/driver-package.sha256"
+          dpkg-deb --field ./*.deb Package Version > "$GITHUB_WORKSPACE/evidence/driver-package.txt"
+          dpkg-deb --extract ./*.deb "$RUNNER_TEMP/driver-libraries"
+          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/driver-libraries/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
       - name: Run the existing import contract against the installed package
         run: |
           set -o pipefail
