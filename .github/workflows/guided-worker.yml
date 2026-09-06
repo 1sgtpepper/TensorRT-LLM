@@ -19,6 +19,8 @@ on:
     paths:
       - .github/workflows/guided-worker.yml
       - .github/guided_worker.py
+      - .github/run_guided_worker_controls.py
+      - .github/guided_recompute_control.patch
 
 permissions:
   contents: read
@@ -88,6 +90,7 @@ jobs:
           }
           assert len(compiler["nvcc"]) == 1
           nvcc = Path(compiler["nvcc"][0])
+          assert (nvcc.parent.parent / "lib64/libcudart.so").is_file()
           print("Dedicated CUDA toolchain:", compiler)
           subprocess.run([str(nvcc), "--version"], check=True)
           subprocess.run([str(nvcc.parent / "ptxas"), "--version"], check=True)
@@ -101,24 +104,17 @@ jobs:
           uv pip freeze --python "$(command -v python)" > evidence/runtime-packages.txt
           nvidia-smi --query-gpu=name,compute_cap,driver_version,memory.total,memory.free --format=csv > evidence/device.txt
           "$CXX" --version > evidence/host-compiler.txt
-      - name: Exercise real worker with ample and constrained KV capacity
+      - name: Compare real worker baseline, correction and reversion
         run: |
           set -o pipefail
-          mkdir -p "$RUNNER_TEMP/guided-worker"
-          cp .github/guided_worker.py "$RUNNER_TEMP/guided-worker/"
-          cd "$RUNNER_TEMP/guided-worker"
-          timeout --signal=TERM --kill-after=10s 180s \
-            python guided_worker.py --kv-tokens 512 --output "$GITHUB_WORKSPACE/evidence/worker-ample.json" \
-            2>&1 | tee "$GITHUB_WORKSPACE/evidence/worker-ample.log"
-          timeout --signal=TERM --kill-after=10s 180s \
-            python guided_worker.py --kv-tokens 128 --output "$GITHUB_WORKSPACE/evidence/worker-pressure.json" \
-            2>&1 | tee "$GITHUB_WORKSPACE/evidence/worker-pressure.log"
+          timeout --signal=TERM --kill-after=10s 420s \
+            python .github/run_guided_worker_controls.py 2>&1 | tee evidence/worker-controls.log
       - name: Preserve available worker evidence
         if: always()
         run: |
           mkdir -p evidence
           git rev-parse HEAD > evidence/revision.txt
-          cp .github/guided_worker.py evidence/
+          cp .github/guided_worker.py .github/run_guided_worker_controls.py .github/guided_recompute_control.patch evidence/
           find evidence -type f -exec sha256sum {} + > checksums.txt
           tar -czf worker-evidence.tar.gz evidence checksums.txt
           sha256sum worker-evidence.tar.gz
