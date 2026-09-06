@@ -111,9 +111,9 @@ def main() -> None:
                 eos_token_id=7,
                 pad_token_id=7,
                 dtype="bfloat16",
-                draft_vocab_size=32,
             )
             config.save_pretrained(target)
+            config.draft_vocab_size = 32
             config.save_pretrained(draft)
             fast.save_pretrained(target)
             spec = Eagle3DecodingConfig(
