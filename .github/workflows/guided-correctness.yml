@@ -60,7 +60,8 @@ jobs:
               "_torch/pyexecutor/grammar_matcher.py",
               "_torch/pyexecutor/llm_request.py",
               "_torch/pyexecutor/seq_slot_manager.py",
-              "_torch/pyexecutor/scheduler.py",
+              "_torch/pyexecutor/scheduler/__init__.py",
+              "_torch/pyexecutor/scheduler/scheduler.py",
               "_torch/speculative/dynamic_tree_ops.py",
           ):
               actual = (package / relative).read_bytes()
