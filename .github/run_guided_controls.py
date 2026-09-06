@@ -55,6 +55,9 @@ def main() -> None:
                         source, target_is_directory=source.is_dir()
                     )
         owner.write_bytes(baseline)
+        (overlay / "triton_kernels").symlink_to(
+            package.parent / "triton_kernels", target_is_directory=True
+        )
         probes = temporary / "probes"
         probes.mkdir()
         files = ["test_guided_recompute.py", "test_guided_tree.py"]
@@ -99,6 +102,7 @@ def main() -> None:
             records.append(record)
             (evidence / "control-results.json").write_text(json.dumps(records, indent=2) + "\n")
             assert result.returncode == (1 if expected_failures else 0), record
+            assert xml_path.exists(), f"{label} failed before pytest; inspect {label}.log"
             suite = ET.parse(xml_path).getroot().find("testsuite")
             assert int(suite.attrib["tests"]) == count
             assert int(suite.attrib["errors"]) == int(suite.attrib["skipped"]) == 0
