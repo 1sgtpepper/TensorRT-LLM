@@ -19,6 +19,8 @@ on:
     paths:
       - .github/workflows/guided-tree-worker.yml
       - .github/guided_tree_worker.py
+      - .github/run_guided_tree_worker_controls.py
+      - .github/guided_tree_worker_control.patch
 
 permissions:
   contents: read
@@ -110,18 +112,17 @@ jobs:
           set -o pipefail
           timeout --signal=TERM --kill-after=10s 180s \
             python .github/guided_tree_worker.py --mode linear --output evidence/linear.json 2>&1 | tee evidence/linear.log
-      - name: Check real generated-tree output
-        if: ${{ !cancelled() }}
+      - name: Compare real tree baseline, per-node masks and reversion
         run: |
           set -o pipefail
-          timeout --signal=TERM --kill-after=10s 180s \
-            python .github/guided_tree_worker.py --mode tree --output evidence/tree.json 2>&1 | tee evidence/tree.log
+          timeout --signal=TERM --kill-after=10s 420s \
+            python .github/run_guided_tree_worker_controls.py 2>&1 | tee evidence/tree-controls.log
       - name: Preserve available worker evidence
         if: always()
         run: |
           mkdir -p evidence
           git rev-parse HEAD > evidence/revision.txt
-          cp .github/guided_tree_worker.py evidence/
+          cp .github/guided_tree_worker.py .github/run_guided_tree_worker_controls.py .github/guided_tree_worker_control.patch evidence/
           find evidence -type f -exec sha256sum {} + > checksums.txt
           tar -czf tree-worker-evidence.tar.gz evidence checksums.txt
           sha256sum tree-worker-evidence.tar.gz

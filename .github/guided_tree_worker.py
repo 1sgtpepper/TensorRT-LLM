@@ -48,6 +48,7 @@ def main() -> None:
     assert fast.encode(words[0], add_special_tokens=False) == [1, 1, 2, 3, 6]
     assert fast.decode([1, 1, 4, 5, 6]) == words[1]
     trace = []
+    committed = []
     report = {"mode": args.mode, "words": words, "trace": trace, "phase": "setup"}
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     worker_type = Eagle3OneModelDynamicTreeWorker if args.mode == "tree" else Eagle3OneModelWorker
@@ -63,7 +64,11 @@ def main() -> None:
         guide = worker.guided_decoder
         num_contexts = attn_metadata.num_contexts
         num_generations = attn_metadata.num_seqs - num_contexts
-        record = {"contexts": num_contexts, "generations": num_generations}
+        record = {
+            "contexts": num_contexts,
+            "generations": num_generations,
+            "committed_before": list(committed),
+        }
         if args.mode == "tree" and num_generations and worker.spec_tree_manager is not None:
             storage = worker.spec_tree_manager.slot_storage
             slots = storage.all_ids_buf[num_contexts : attn_metadata.num_seqs]
@@ -73,6 +78,10 @@ def main() -> None:
             )
             record["drafts"] = spec_metadata.draft_tokens.cpu().tolist()
         accepted, counts = original_sample(worker, input_ids, logits, attn_metadata, spec_metadata)
+        counts_host = counts.cpu().tolist()
+        accepted_host = [
+            row[:count].cpu().tolist() for row, count in zip(accepted, counts_host, strict=True)
+        ]
         if guide is not None and guide.requests_hostfunc is not None:
             record["requests"] = [
                 {
@@ -87,9 +96,12 @@ def main() -> None:
             record["mask_enabled"] = guide.token_mask_host[: logits.shape[0]].tolist()
             record["advanced"] = list(guide.num_advanced_tokens)
             record["predicted"] = logits.argmax(dim=-1).cpu().tolist()
-            record["counts"] = counts.cpu().tolist()
-            record["accepted"] = accepted.cpu().tolist()
-            trace.append(record)
+            record["counts"] = counts_host
+            record["accepted"] = accepted_host
+            if record["requests"]:
+                trace.append(record)
+                assert len(accepted_host) == 1
+                committed.extend(accepted_host[0])
         return accepted, counts
 
     worker_type.sample_and_accept_draft_tokens = sample
@@ -148,7 +160,7 @@ def main() -> None:
                 output = llm.generate(
                     [0],
                     SamplingParams(
-                        max_tokens=6,
+                        max_tokens=4,
                         temperature=0,
                         top_k=1,
                         end_id=7,
@@ -167,7 +179,10 @@ def main() -> None:
             assert any(any(row.get("tree_valid", [])) for row in trace), (
                 "No real generated tree was consumed"
             )
-        assert report["actual"] in words, "Real worker output violates the finite language"
+        assert len(report["tokens"]) == 4
+        assert any(word.startswith(report["actual"]) for word in words), (
+            "Real worker output violates the finite language"
+        )
     finally:
         worker_type.sample_and_accept_draft_tokens = original_sample
         args.output.write_text(json.dumps(report, indent=2) + "\n")

@@ -1,0 +1,42 @@
+--- a/guided_tree_worker.py
++++ b/guided_tree_worker.py
+@@ -77,6 +77,39 @@
+                 storage.pack_retrieve_from_slots(slots, num_generations).cpu().tolist()
+             )
+             record["drafts"] = spec_metadata.draft_tokens.cpu().tolist()
++        if record.get("tree_valid") == [True]:
++            # Only the first valid tree is consumed; no prior draft was accepted.
++            assert committed == [1, 1]
++            requests = guide.requests_hostfunc
++            assert len(requests.requests) == 1
++            request = requests.requests[0]
++            assert request.num_accepted_draft_tokens == 0
++            assert guide.num_advanced_tokens[request.seq_slot] == 1
++            assert guide.token_mask_host[0].item() == 1
++            assert not guide.token_mask_host[1 : logits.shape[0]].any().item()
++            links = record["topology"][0]
++            paths = {0: ()}
++            for parent, (_, child, _) in enumerate(links):
++                assert parent in paths
++                while child != -1:
++                    assert child not in paths
++                    row = links[child][0]
++                    paths[child] = paths[parent] + (record["drafts"][row - 1],)
++                    child = links[child][2]
++            assert len(paths) == len(links)
++            corrected_rows = []
++            for node, ancestors in paths.items():
++                matcher = guide.grammar_matcher_factory.create(request.guided_decoding_params)
++                if not all(matcher.accept_token(token) for token in (*committed, *ancestors)):
++                    continue
++                row = links[node][0]
++                matcher.fill_next_token_bitmask(guide.bitmask_host, row)
++                guide.token_mask_host[row] = 1
++                corrected_rows.append(row)
++            assert len(corrected_rows) >= 3
++            guide._copy_bitmask(requests)
++            guide._apply_bitmask(requests, logits)
++            record["corrected_rows"] = corrected_rows
+         accepted, counts = original_sample(worker, input_ids, logits, attn_metadata, spec_metadata)
+         counts_host = counts.cpu().tolist()
+         accepted_host = [
