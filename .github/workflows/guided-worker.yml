@@ -46,6 +46,7 @@ jobs:
           python - <<'PY' | tee evidence/source-provenance.log
           import hashlib
           import importlib.metadata
+          import json
           import os
           from pathlib import Path
           import subprocess
@@ -73,13 +74,25 @@ jobs:
           native = list(package.glob("bindings.*.so"))
           assert len(native) == 1
           print(hashlib.sha256(native[0].read_bytes()).hexdigest(), native[0])
-          compiler = importlib.metadata.distribution("nvidia-cuda-nvcc")
-          nvcc = [Path(compiler.locate_file(path)).resolve()
-                  for path in compiler.files if path.name == "nvcc"]
-          assert len(nvcc) == 1
-          subprocess.run([str(nvcc[0]), "--version"], check=True)
+          compiler = json.loads(subprocess.check_output([
+              os.environ["VALIDATION_CUDA_PYTHON"], "-c",
+              "import importlib.metadata as m,json; from pathlib import Path; "
+              "d=m.distribution('nvidia-cuda-nvcc'); "
+              "print(json.dumps({'nvcc':[str(Path(d.locate_file(f)).resolve()) for f in d.files if f.name=='nvcc'],"
+              "'versions':{n:m.version(n) for n in ('nvidia-cuda-nvcc','nvidia-nvvm','nvidia-cuda-runtime','nvidia-cuda-cccl','nvidia-cuda-crt')}}))"
+          ], text=True))
+          assert compiler["versions"] == {
+              "nvidia-cuda-nvcc": "13.0.88", "nvidia-nvvm": "13.0.88",
+              "nvidia-cuda-runtime": "13.0.96", "nvidia-cuda-cccl": "13.0.85",
+              "nvidia-cuda-crt": "13.0.88",
+          }
+          assert len(compiler["nvcc"]) == 1
+          nvcc = Path(compiler["nvcc"][0])
+          print("Dedicated CUDA toolchain:", compiler)
+          subprocess.run([str(nvcc), "--version"], check=True)
+          subprocess.run([str(nvcc.parent / "ptxas"), "--version"], check=True)
           with open(os.environ["GITHUB_ENV"], "a") as output:
-              output.write(f"CUDA_HOME={nvcc[0].parent.parent}\n")
+              output.write(f"CUDA_HOME={nvcc.parent.parent}\n")
               output.write(f"LD_LIBRARY_PATH={Path(sys.prefix) / 'lib'}:"
                            f"{sysconfig.get_config_var('LIBDIR')}:"
                            f"{os.environ.get('LD_LIBRARY_PATH', '')}\n")

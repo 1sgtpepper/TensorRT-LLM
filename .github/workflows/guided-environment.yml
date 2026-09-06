@@ -17,6 +17,9 @@ on:
   push:
     branches:
       - validation/guided-decoding-correctness
+    paths:
+      - .github/workflows/guided-environment.yml
+      - .github/guided-environment.in
   workflow_dispatch:
 
 permissions:
