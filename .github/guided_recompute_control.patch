@@ -1,0 +1,33 @@
+--- a/tensorrt_llm/_torch/pyexecutor/guided_decoder.py
++++ b/tensorrt_llm/_torch/pyexecutor/guided_decoder.py
+@@ -38,6 +38,7 @@
+     is_draft: bool = False
+     draft_tokens: Optional[List[int]] = None
+     num_accepted_draft_tokens: Optional[int] = None
++    committed_output: Tuple[int, ...] = ()
+ 
+     def require_matcher_init(self) -> bool:
+         if self.guided_decoding_params is None:
+@@ -80,7 +81,12 @@
+             new_token=request.get_last_tokens(0),
+             is_draft=request.py_is_draft,
+             draft_tokens=request.py_draft_tokens,
+-            num_accepted_draft_tokens=request.py_num_accepted_draft_tokens)
++            num_accepted_draft_tokens=request.py_num_accepted_draft_tokens,
++            committed_output=(
++                tuple(request.get_tokens(0)[request.orig_prompt_len:])
++                if request.guided_decoding_params is not None
++                and request.is_context_init_state
++                and request.is_last_context_chunk else ()))
+ 
+     def cast_to_draft(self) -> None:
+         self.is_draft = True
+@@ -231,6 +237,8 @@
+                 if matcher_init:
+                     matcher = self.grammar_matcher_factory.create(
+                         req.guided_decoding_params)
++                    for token in req.committed_output:
++                        assert matcher.accept_token(token), "Committed output is outside the grammar"
+                     self.grammar_matchers[slot] = matcher
+ 
+                 if matcher_advance:

@@ -1,0 +1,26 @@
+--- a/test_guided_tree.py
++++ b/test_guided_tree.py
+@@ -132,6 +132,23 @@
+     logits[3:, 5] = 10
+     original_logits = logits.cpu().clone()
+     assert decoder._build(requests) == [], "Generation matcher build failed"
++    # The control changes only per-node mask construction from the native topology.
++    links = packed.cpu().tolist()[0]
++    node_tokens = [request.new_token] + request.draft_tokens
++    paths = {0: ()}
++    for parent, (_, child, _) in enumerate(links):
++        while child != -1:
++            assert child not in paths
++            paths[child] = paths[parent] + (node_tokens[links[child][0]],)
++            child = links[child][2]
++    assert len(paths) == len(links)
++    committed = (bootstrap.new_token, int(bootstrap_tokens[0, 0].item()))
++    for node, ancestors in paths.items():
++        matcher = decoder.grammar_matcher_factory.create(params)
++        for token in committed + ancestors:
++            assert matcher.accept_token(token), "The controlled ancestor path must be legal"
++        matcher.fill_next_token_bitmask(decoder.bitmask_host, links[node][0])
++        decoder.token_mask_host[links[node][0]] = 1
+     decoder._copy_bitmask(requests)
+     decoder._apply_bitmask(requests, logits)
+     predicted = logits.argmax(dim=-1).to(torch.int32).reshape(1, 5)
