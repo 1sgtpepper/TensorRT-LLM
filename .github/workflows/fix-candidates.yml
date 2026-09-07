@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 161bd68f74f70ad857adcc3f96613d1bff37362d
+          ref: d7fdab967afed08a86b3816c89cec39c2ee65ab4
           fetch-depth: 1
       - uses: actions/setup-python@v5
         with:
@@ -45,13 +45,17 @@ jobs:
           key: guided-recompute-hooks-py312-${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Run repository release checks on changed files
         run: |
-          test "$(git rev-parse HEAD)" = 161bd68f74f70ad857adcc3f96613d1bff37362d
+          test "$(git rev-parse HEAD)" = d7fdab967afed08a86b3816c89cec39c2ee65ab4
           git fetch --depth=1 origin 17803f6c0cbe8d9fed3ccf46a295b867e3493d3e
           git diff --name-only 17803f6c0cbe8d9fed3ccf46a295b867e3493d3e HEAD > /tmp/changed-files.txt
           python -u scripts/release_check.py --files-from /tmp/changed-files.txt
           git diff --exit-code
       - name: Verify the GPU regression is selected by CI
-        run: python scripts/test_to_stage_mapping.py --tests unittest/_torch/test_guided_tree.py
+        run: |
+          python scripts/test_to_stage_mapping.py --tests unittest/_torch/test_guided_tree.py > /tmp/tree-stages.txt
+          cat /tmp/tree-stages.txt
+          test -s /tmp/tree-stages.txt
+          rg -q A10-PyTorch /tmp/tree-stages.txt
       - name: Show hook changes
         if: failure()
         run: git diff
