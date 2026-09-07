@@ -121,12 +121,19 @@ def test_tree_masks_follow_ancestors(guide, tree_valid, words, drafts, prefixes)
 
 
 @pytest.mark.parametrize(
-    "preferred,partial,expected",
-    [("b", False, "bcf"), ("d", False, "def"), ("f", False, "f"), ("b", True, "bc")],
+    "preferred,partial,expected,next_token",
+    [
+        ("b", False, "bcf", "b"),
+        ("d", False, "def", "d"),
+        ("f", False, "f", "x"),
+        ("b", True, "bc", "f"),
+    ],
 )
-def test_verified_branch_continues_with_overlap_tokens(guide, preferred, partial, expected):
+def test_verified_branch_continues_with_overlap_tokens(
+    guide, preferred, partial, expected, next_token
+):
     decoder, vocabulary = guide
-    request = _request(decoder, "a(bc|de)?f")
+    request = _request(decoder, "a(bcfb|defd|fx)")
     drafts = ["x", "b", "d", "x" if partial else "c", "e"]
     request.py_draft_tokens = [vocabulary.index(token) for token in drafts]
     _generation(decoder, [request])
@@ -158,7 +165,7 @@ def test_verified_branch_continues_with_overlap_tokens(guide, preferred, partial
     actual = "".join(vocabulary[tid] for tid in accepted[0, :count].tolist())
     assert actual == expected
     allowed = set(next_logits[0].isfinite().nonzero().flatten().tolist())
-    assert allowed == ({6} if partial else {7})
+    assert allowed == {vocabulary.index(next_token)}
     assert request.get_tokens(0) == [0, 1]
 
 
