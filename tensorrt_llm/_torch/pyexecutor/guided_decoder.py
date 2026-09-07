@@ -255,7 +255,8 @@ class GuidedDecoder:
                     for token in req.committed_output:
                         if not matcher.accept_token(token):
                             raise ValueError(
-                                f"Request {req.request_id} at slot {slot} failed to accept committed output token: {token}."
+                                f"Request {req.request_id} at slot {slot} "
+                                f"failed to accept committed output token: {token}."
                             )
                     self.grammar_matchers[slot] = matcher
 
