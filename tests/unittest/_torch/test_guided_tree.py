@@ -28,9 +28,9 @@ from tensorrt_llm.llmapi.llm_args import GuidedDecodingConfig
 @pytest.fixture(params=list(GuidedDecodingConfig.GuidedDecodingBackend))
 def guide(request):
     vocabulary = list("xabcdef") + ["<eos>"] + [f"Z{i}" for i in range(24)]
-    tokenizer = Tokenizer(models.WordLevel(dict(zip(vocabulary, range(32))), unk_token="Z23"))
+    tokenizer = Tokenizer(models.BPE(dict(zip(vocabulary, range(32))), merges=[], unk_token="Z23"))
     tokenizer.pre_tokenizer = pre_tokenizers.Split("", behavior="isolated")
-    tokenizer.decoder = decoders.Fuse()
+    tokenizer.decoder = decoders.ByteLevel()
     config = GuidedDecodingConfig(
         backend=request.param,
         encoded_vocab=vocabulary,
@@ -150,7 +150,7 @@ def test_verified_branch_continues_with_overlap_tokens(guide, preferred, partial
     # Match production overlap: the request history is still old, while the
     # verifier's final output supplies the next root through device staging.
     next_tokens = torch.zeros((6, 2, 1), dtype=torch.int32, device="cuda")
-    next_tokens[0, 0, 0] = accepted[0, counts[0] - 1]
+    next_tokens[0, 0, 0] = accepted.gather(1, (counts - 1).long().unsqueeze(1))[0, 0]
     _generation(decoder, [request], new_tokens=next_tokens)
     next_logits = torch.zeros((6, 32), device="cuda")
     decoder.execute(next_logits)
