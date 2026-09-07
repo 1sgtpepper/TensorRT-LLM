@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 263f52640bdde9fca60f64c42c0ee3100c82a9a5
+          ref: 5688f8304a4df00bc77e0e6f72b0970e42418260
           fetch-depth: 3
       - uses: actions/setup-python@v5
         with:
@@ -45,7 +45,7 @@ jobs:
           key: guided-recompute-hooks-py312-${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Run repository release checks on changed files
         run: |
-          test "$(git rev-parse HEAD)" = 263f52640bdde9fca60f64c42c0ee3100c82a9a5
+          test "$(git rev-parse HEAD)" = 5688f8304a4df00bc77e0e6f72b0970e42418260
           git diff --name-only 17803f6c0cbe8d9fed3ccf46a295b867e3493d3e HEAD > /tmp/changed-files.txt
           python -u scripts/release_check.py --files-from /tmp/changed-files.txt
           git diff --exit-code
