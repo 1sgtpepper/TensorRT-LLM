@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Check guided recomputation fix
+
+on:
+  push:
+    branches: [ci/guided-recompute-fix]
+    paths: [.github/workflows/fix-candidates.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: d3daed28efb8418f6b9f5b0f83c158e5a5909236
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: guided-recompute-hooks-py312-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Run repository release checks on changed files
+        run: |
+          test "$(git rev-parse HEAD)" = d3daed28efb8418f6b9f5b0f83c158e5a5909236
+          git diff --name-only HEAD^ HEAD > /tmp/changed-files.txt
+          python -u scripts/release_check.py --files-from /tmp/changed-files.txt
+          git diff --exit-code
+      - name: Verify the GPU regression is selected by CI
+        run: python scripts/test_to_stage_mapping.py --tests unittest/_torch/test_guided_recompute.py
+      - name: Show hook changes
+        if: failure()
+        run: git diff
