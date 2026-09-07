@@ -704,6 +704,20 @@ class Eagle3OneModelWorker(SpecWorkerBase):
                 self._saved_generation_lengths)
             self._saved_generation_lengths = None
 
+    def _execute_guided_decoder_if_present(self, logits, attn_metadata):
+        if self.guided_decoder is None:
+            return
+        if not self.use_dynamic_tree or self.spec_tree_manager is None:
+            return super()._execute_guided_decoder_if_present(logits)
+        num_contexts = attn_metadata.num_contexts
+        num_gens = attn_metadata.num_seqs - num_contexts
+        storage = self.spec_tree_manager.slot_storage
+        slots = storage.all_ids_buf[num_contexts:attn_metadata.num_seqs]
+        self.guided_decoder.execute(logits,
+                                    retrieve=storage.pack_retrieve_from_slots(
+                                        slots, num_gens),
+                                    tree_valid=storage.has_tree[slots])
+
     # Skip torch.compile for now since current Torch is not compatible with Triton 3.4
     # @torch.compile(options={"max-autotune": True})
 
@@ -730,12 +744,15 @@ class Eagle3OneModelWorker(SpecWorkerBase):
 
         raw_logits = logits
 
-        self._execute_guided_decoder_if_present(logits)
+        self._execute_guided_decoder_if_present(logits, attn_metadata)
 
         # Sample and accept tokens. ``input_ids`` is required by the relaxed-
         # acceptance path (scans for thinking-phase tokens); ignored otherwise.
         accepted_tokens, num_accepted_tokens = self.sample_and_accept_draft_tokens(
             input_ids, logits, attn_metadata, spec_metadata)
+        if self.use_dynamic_tree and self.guided_decoder is not None:
+            self.guided_decoder.commit_tree_tokens(accepted_tokens,
+                                                   num_accepted_tokens)
 
         # Mamba hybrid models need state updates after token acceptance because
         # the accepted token count affects which Mamba states are valid. The

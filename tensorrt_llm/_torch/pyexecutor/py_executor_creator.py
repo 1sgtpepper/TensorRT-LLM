@@ -44,7 +44,8 @@ from .config_utils import (is_hybrid_linear, is_minimax_m3,
                            uses_vswa_kv_cache_layout)
 from .connectors.kv_cache_connector import KvCacheConnectorManager
 from .dwdp import DwdpManager
-from .guided_decoder import CapturableGuidedDecoder, GuidedDecoder
+from .guided_decoder import (CapturableGuidedDecoder,
+                             CapturableTreeGuidedDecoder, GuidedDecoder)
 from .model_engine import PyTorchModelEngine
 from .model_loader import ModelLoader, _construct_checkpoint_loader
 from .py_executor import PyExecutor
@@ -779,8 +780,11 @@ def create_py_executor(
                 elif spec_config.spec_dec_mode.support_capturable_guided_decoder(
                 ):
                     # CapturableGuidedDecoder is applicable to one-model speculative decoding.
+                    decoder_type = (CapturableTreeGuidedDecoder if getattr(
+                        spec_config, "use_dynamic_tree", False) else
+                                    CapturableGuidedDecoder)
                     success = model_engine.set_guided_decoder(
-                        CapturableGuidedDecoder(**kwargs))
+                        decoder_type(**kwargs))
                     if not success:
                         raise ValueError(
                             f"Failed to set guided decoder for speculative decoding mode: {spec_config.spec_dec_mode.name}."
