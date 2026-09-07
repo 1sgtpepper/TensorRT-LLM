@@ -177,6 +177,7 @@ def test_graph_replay_uses_current_tree_and_clears_padded_rows(guide):
         max_new_tokens=16,
         input_tokens=[0],
         sampling_config=SamplingConfig(1),
+        is_streaming=False,
     )
     dummy.state = LlmRequestState.GENERATION_IN_PROGRESS
     _generation(decoder, [dummy])
@@ -205,3 +206,36 @@ def test_graph_replay_uses_current_tree_and_clears_padded_rows(guide):
         else:
             assert finite[1:6].all()
             assert finite[6:].all()
+
+
+def test_tree_masks_in_a_mixed_context_generation_batch(guide):
+    decoder, vocabulary = guide
+    generation = _request(decoder, "a(bc|de)f")
+    generation.py_draft_tokens = [vocabulary.index(t) for t in ["x", "b", "d", "c", "e"]]
+    context = LlmRequest(
+        request_id=2,
+        seq_slot=1,
+        max_new_tokens=16,
+        input_tokens=[0],
+        sampling_config=SamplingConfig(1),
+        is_streaming=False,
+        end_id=7,
+        guided_decoding_params=GuidedDecodingParams(GuidedDecodingParams.GuideType.REGEX, "df"),
+    )
+    context.py_seq_slot = 1
+    batch = ScheduledRequests()
+    batch.append_context_request(context)
+    batch.append_generation_request(generation)
+    decoder.add_batch(batch)
+    retrieve = torch.tensor(
+        [[[0, 1, -1], [1, -1, 2], [2, 4, 3], [3, 5, -1], [4, -1, -1], [5, -1, -1]]],
+        dtype=torch.int32,
+        device="cuda",
+    )
+    logits = torch.zeros((7, 32), device="cuda")
+    decoder.execute(
+        logits, retrieve=retrieve, tree_valid=torch.ones(1, dtype=torch.bool, device="cuda")
+    )
+    finite = logits.isfinite().cpu()
+    for row, allowed in [(0, {4}), (1, {2, 4}), (3, {3}), (4, {5}), (5, {6}), (6, {6})]:
+        assert set(finite[row].nonzero().flatten().tolist()) == allowed
