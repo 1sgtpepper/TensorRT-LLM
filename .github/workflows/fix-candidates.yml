@@ -34,8 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: d3daed28efb8418f6b9f5b0f83c158e5a5909236
-          fetch-depth: 2
+          ref: 9a9419cd98c9bc8d4705051aced4f57ca0b15dd2
+          fetch-depth: 3
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -45,8 +45,8 @@ jobs:
           key: guided-recompute-hooks-py312-${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Run repository release checks on changed files
         run: |
-          test "$(git rev-parse HEAD)" = d3daed28efb8418f6b9f5b0f83c158e5a5909236
-          git diff --name-only HEAD^ HEAD > /tmp/changed-files.txt
+          test "$(git rev-parse HEAD)" = 9a9419cd98c9bc8d4705051aced4f57ca0b15dd2
+          git diff --name-only 17803f6c0cbe8d9fed3ccf46a295b867e3493d3e HEAD > /tmp/changed-files.txt
           python -u scripts/release_check.py --files-from /tmp/changed-files.txt
           git diff --exit-code
       - name: Verify the GPU regression is selected by CI
