@@ -750,7 +750,7 @@ class Eagle3OneModelWorker(SpecWorkerBase):
         # acceptance path (scans for thinking-phase tokens); ignored otherwise.
         accepted_tokens, num_accepted_tokens = self.sample_and_accept_draft_tokens(
             input_ids, logits, attn_metadata, spec_metadata)
-        if self.use_dynamic_tree and self.guided_decoder is not None:
+        if self.spec_tree_manager is not None and self.guided_decoder is not None:
             self.guided_decoder.commit_tree_tokens(accepted_tokens,
                                                    num_accepted_tokens)
 

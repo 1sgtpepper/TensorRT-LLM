@@ -35,6 +35,7 @@ from ..attention_backend.interface import AttentionRuntimeFeatures
 from ..distributed import Distributed
 from ..speculative import (get_num_extra_kv_tokens, get_spec_drafter,
                            get_spec_resource_manager)
+from ..speculative.utils import _is_effective_dynamic_tree
 from ..virtual_memory import scope as virtual_memory_scope
 from ._util import (KvCacheCreator, _adjust_torch_mem_fraction,
                     create_py_executor_instance, instantiate_sampler, is_mla,
@@ -780,9 +781,13 @@ def create_py_executor(
                 elif spec_config.spec_dec_mode.support_capturable_guided_decoder(
                 ):
                     # CapturableGuidedDecoder is applicable to one-model speculative decoding.
-                    decoder_type = (CapturableTreeGuidedDecoder if getattr(
-                        spec_config, "use_dynamic_tree", False) else
-                                    CapturableGuidedDecoder)
+                    tree_guidance = (
+                        spec_config.spec_dec_mode.is_eagle3_one_model()
+                        and _is_effective_dynamic_tree(spec_config)) or (
+                            spec_config.spec_dec_mode.is_mtp_eagle_one_model()
+                            and spec_config.use_dynamic_tree)
+                    decoder_type = (CapturableTreeGuidedDecoder if tree_guidance
+                                    else CapturableGuidedDecoder)
                     success = model_engine.set_guided_decoder(
                         decoder_type(**kwargs))
                     if not success:

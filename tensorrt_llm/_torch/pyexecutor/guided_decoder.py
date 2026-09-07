@@ -648,7 +648,7 @@ class CapturableTreeGuidedDecoder(CapturableGuidedDecoder):
                     node = siblings.pop()
                     continue
                 row, child, sibling = retrieve[node]
-                if not matcher.accept_token(req.draft_tokens[row - 1]):
+                if not matcher.accept_token(req.draft_tokens[node - 1]):
                     node = sibling
                     continue
                 siblings.append(sibling)
