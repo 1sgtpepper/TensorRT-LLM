@@ -55,7 +55,7 @@ jobs:
           python scripts/test_to_stage_mapping.py --tests unittest/_torch/test_guided_tree.py > /tmp/tree-stages.txt
           cat /tmp/tree-stages.txt
           test -s /tmp/tree-stages.txt
-          rg -q A10-PyTorch /tmp/tree-stages.txt
+          grep -q A10-PyTorch /tmp/tree-stages.txt
       - name: Show hook changes
         if: failure()
         run: git diff
