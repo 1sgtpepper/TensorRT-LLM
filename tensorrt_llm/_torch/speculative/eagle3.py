@@ -704,7 +704,9 @@ class Eagle3OneModelWorker(SpecWorkerBase):
                 self._saved_generation_lengths)
             self._saved_generation_lengths = None
 
-    def _execute_guided_decoder_if_present(self, logits, attn_metadata):
+    def _execute_guided_decoder_if_present(
+            self, logits: torch.Tensor,
+            attn_metadata: AttentionMetadata) -> None:
         if self.guided_decoder is None:
             return
         if not self.use_dynamic_tree or self.spec_tree_manager is None:

@@ -615,7 +615,7 @@ class CapturableTreeGuidedDecoder(CapturableGuidedDecoder):
                  max_num_sequences: int,
                  vocab_size_padded: int,
                  max_num_draft_tokens: int = 0,
-                 rank: int = 0):
+                 rank: int = 0) -> None:
         super().__init__(guided_decoding_config, max_num_sequences,
                          vocab_size_padded, max_num_draft_tokens, rank)
         self.retrieve_host = torch.empty(max_num_sequences,
@@ -698,6 +698,7 @@ class CapturableTreeGuidedDecoder(CapturableGuidedDecoder):
 
     def commit_tree_tokens(self, accepted_tokens: torch.Tensor,
                            num_accepted_tokens: torch.Tensor) -> None:
+        """Commit int32 [batch, path] tokens with int32 [batch] accepted lengths."""
         batch_size, max_path_len = accepted_tokens.shape
         self.new_tokens[:max_path_len, :batch_size].copy_(accepted_tokens.T,
                                                           non_blocking=True)

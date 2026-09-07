@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Iterator
+
 import pytest
 import torch
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers
@@ -26,7 +28,9 @@ from tensorrt_llm.llmapi.llm_args import GuidedDecodingConfig
 
 
 @pytest.fixture(params=list(GuidedDecodingConfig.GuidedDecodingBackend))
-def guide(request):
+def guide(
+    request: pytest.FixtureRequest,
+) -> Iterator[tuple[CapturableTreeGuidedDecoder, list[str]]]:
     vocabulary = list("xabcdef") + ["<eos>"] + [f"Z{i}" for i in range(24)]
     tokenizer = Tokenizer(models.BPE(dict(zip(vocabulary, range(32))), merges=[], unk_token="Z23"))
     tokenizer.pre_tokenizer = pre_tokenizers.Split("", behavior="isolated")
@@ -42,7 +46,9 @@ def guide(request):
     torch.cuda.synchronize()
 
 
-def _request(decoder, regex, slot=0, request_id=1):
+def _request(
+    decoder: CapturableTreeGuidedDecoder, regex: str, slot: int = 0, request_id: int = 1
+) -> LlmRequest:
     request = LlmRequest(
         request_id=request_id,
         seq_slot=slot,
@@ -67,7 +73,11 @@ def _request(decoder, regex, slot=0, request_id=1):
     return request
 
 
-def _generation(decoder, requests, new_tokens=None):
+def _generation(
+    decoder: CapturableTreeGuidedDecoder,
+    requests: list[LlmRequest],
+    new_tokens: torch.Tensor | None = None,
+) -> None:
     batch = ScheduledRequests()
     for request in requests:
         batch.append_generation_request(request)
@@ -83,7 +93,13 @@ def _generation(decoder, requests, new_tokens=None):
         (("a", "ab", "ad"), ["<eos>", "b", "d", "x", "x"], [None, "ab", "ad", "abx", "adx"]),
     ],
 )
-def test_tree_masks_follow_ancestors(guide, tree_valid, words, drafts, prefixes):
+def test_tree_masks_follow_ancestors(
+    guide: tuple[CapturableTreeGuidedDecoder, list[str]],
+    tree_valid: bool,
+    words: tuple[str, ...],
+    drafts: list[str],
+    prefixes: list[str | None],
+) -> None:
     decoder, vocabulary = guide
     request = _request(decoder, "|".join(words))
     request.py_draft_tokens = [vocabulary.index(token) for token in drafts]
@@ -130,8 +146,12 @@ def test_tree_masks_follow_ancestors(guide, tree_valid, words, drafts, prefixes)
     ],
 )
 def test_verified_branch_continues_with_overlap_tokens(
-    guide, preferred, partial, expected, next_token
-):
+    guide: tuple[CapturableTreeGuidedDecoder, list[str]],
+    preferred: str,
+    partial: bool,
+    expected: str,
+    next_token: str,
+) -> None:
     decoder, vocabulary = guide
     request = _request(decoder, "a(bcfb|defd|fx)")
     drafts = ["x", "b", "d", "x" if partial else "c", "e"]
@@ -169,7 +189,9 @@ def test_verified_branch_continues_with_overlap_tokens(
     assert request.get_tokens(0) == [0, 1]
 
 
-def test_graph_replay_uses_current_tree_and_clears_padded_rows(guide):
+def test_graph_replay_uses_current_tree_and_clears_padded_rows(
+    guide: tuple[CapturableTreeGuidedDecoder, list[str]],
+) -> None:
     decoder, vocabulary = guide
     logits = torch.zeros((12, 32), device="cuda")
     retrieve = torch.tensor(
@@ -215,7 +237,9 @@ def test_graph_replay_uses_current_tree_and_clears_padded_rows(guide):
             assert finite[6:].all()
 
 
-def test_tree_masks_in_a_mixed_context_generation_batch(guide):
+def test_tree_masks_in_a_mixed_context_generation_batch(
+    guide: tuple[CapturableTreeGuidedDecoder, list[str]],
+) -> None:
     decoder, vocabulary = guide
     generation = _request(decoder, "a(bc|de)f")
     generation.py_draft_tokens = [vocabulary.index(t) for t in ["x", "b", "d", "c", "e"]]

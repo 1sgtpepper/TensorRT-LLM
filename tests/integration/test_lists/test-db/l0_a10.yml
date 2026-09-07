@@ -17,6 +17,7 @@ l0_a10:
   - unittest/_torch/sampler/test_torch_sampler.py
   - unittest/_torch/sampler/test_penalties.py
   - unittest/_torch/test_tensor_lru_cache.py
+  - unittest/_torch/test_guided_tree.py
   - unittest/_torch/test_torch_multi_arange.py
   - unittest/_torch/test_fused_relu2.py
   - unittest/_torch/test_mnnvl_alltoall_workspace.py
