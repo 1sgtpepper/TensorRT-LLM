@@ -30,9 +30,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - revision: 34836d506de2223448b5227d61f4d422ca74199a
+          - revision: 7e3a7beada5ec7ef2fa0790430dfa672748861b6
             test: test_guided_recompute.py
-          - revision: 7c30b1283d2e90e0a0aeee2cf88022143f697ddc
+          - revision: 0af91fc391505f2fec17ac936e6cd4745239724a
             test: test_guided_tree.py
     runs-on: ubuntu-24.04
     timeout-minutes: 20
