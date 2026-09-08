@@ -16,7 +16,7 @@
 import pytest
 import torch
 
-from tensorrt_llm._torch.pyexecutor.guided_decoder import GuidedDecoder
+from tensorrt_llm._torch.pyexecutor.guided_decoder import CapturableGuidedDecoder, GuidedDecoder
 from tensorrt_llm._torch.pyexecutor.llm_request import LlmRequest, LlmRequestState, SamplingConfig
 from tensorrt_llm._torch.pyexecutor.scheduler import ScheduledRequests
 from tensorrt_llm._torch.pyexecutor.seq_slot_manager import SeqSlotManager
@@ -48,6 +48,7 @@ def _schedule(request: LlmRequest, slots: SeqSlotManager) -> ScheduledRequests:
     return batch
 
 
+@pytest.mark.parametrize("mode", ["eager", "capture", "drafts"])
 @pytest.mark.parametrize("move_slot", [False, True])
 @pytest.mark.parametrize(
     "transition,pause_points",
@@ -63,12 +64,18 @@ def _schedule(request: LlmRequest, slots: SeqSlotManager) -> ScheduledRequests:
     ],
 )
 def test_guided_output_continues_across_recompute(
-    transition: str, pause_points: tuple[int, ...], move_slot: bool
+    transition: str, pause_points: tuple[int, ...], move_slot: bool, mode: str
 ) -> None:
     vocabulary = list("abcdx") + ["<eos>"] + [f"Z{i}" for i in range(26)]
     config = GuidedDecodingConfig(encoded_vocab=vocabulary, stop_token_ids=[5])
     params = GuidedDecodingParams(GuidedDecodingParams.GuideType.REGEX, "abcd")
-    decoder = GuidedDecoder(config, max_num_sequences=2, vocab_size_padded=32)
+    decoder_type = CapturableGuidedDecoder if mode == "capture" else GuidedDecoder
+    decoder = decoder_type(
+        config, max_num_sequences=2, vocab_size_padded=32,
+        max_num_draft_tokens=2 if mode == "drafts" else 0,
+    )
+    logits = torch.zeros((3 if mode == "drafts" else 1, 32), device="cuda")
+    graph = None
     slots = SeqSlotManager(2 if move_slot else 1)
     request = _make_request(41, params)
     _schedule(request, slots)
@@ -102,11 +109,29 @@ def test_guided_output_continues_across_recompute(
         batch = _schedule(request, slots)
         if generated in pause_points:
             assert (request.py_seq_slot != old_slot) == move_slot
+        request.py_num_accepted_draft_tokens = 0
+        request.py_draft_tokens = (
+            list(range(generated, min(generated + 2, 4)))
+            if mode == "drafts" and request.is_generation_in_progress_state else []
+        )
         decoder.add_batch(batch)
-        logits = torch.zeros((1, 32), dtype=torch.float32, device="cuda")
+        logits.zero_()
         logits[0, :4] = torch.tensor([10.0, 9.0, 8.0, 7.0], device="cuda")
-        assert decoder.execute(logits) == [], "Guidance failed before output validation"
-        token = int(logits.argmax(dim=-1).item())
+        if mode == "capture":
+            if graph is None:
+                decoder.token_event.record()
+                decoder.execute(logits)
+                torch.cuda.synchronize()
+                graph = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(graph):
+                    decoder.token_event.record()
+                    decoder.execute(logits)
+            graph.replay()
+        else:
+            assert decoder.execute(logits) == [], "Guidance failed before output validation"
+            if mode == "drafts":
+                decoder.rollback_rejected_tokens()
+        token = int(logits[0].argmax().item())
         request.add_new_token(token, 0)
         request.state = LlmRequestState.GENERATION_IN_PROGRESS
         request.py_decoding_iter += 1
