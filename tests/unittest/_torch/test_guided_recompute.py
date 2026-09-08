@@ -71,7 +71,9 @@ def test_guided_output_continues_across_recompute(
     params = GuidedDecodingParams(GuidedDecodingParams.GuideType.REGEX, "abcd")
     decoder_type = CapturableGuidedDecoder if mode == "capture" else GuidedDecoder
     decoder = decoder_type(
-        config, max_num_sequences=2, vocab_size_padded=32,
+        config,
+        max_num_sequences=2,
+        vocab_size_padded=32,
         max_num_draft_tokens=2 if mode == "drafts" else 0,
     )
     logits = torch.zeros((3 if mode == "drafts" else 1, 32), device="cuda")
@@ -112,7 +114,8 @@ def test_guided_output_continues_across_recompute(
         request.py_num_accepted_draft_tokens = 0
         request.py_draft_tokens = (
             list(range(generated, min(generated + 2, 4)))
-            if mode == "drafts" and request.is_generation_in_progress_state else []
+            if mode == "drafts" and request.is_generation_in_progress_state
+            else []
         )
         decoder.add_batch(batch)
         logits.zero_()
