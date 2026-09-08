@@ -270,3 +270,54 @@ def test_tree_masks_in_a_mixed_context_generation_batch(
     finite = logits.isfinite().cpu()
     for row, allowed in [(0, {4}), (1, {2, 4}), (3, {3}), (4, {5}), (5, {6}), (6, {6})]:
         assert set(finite[row].nonzero().flatten().tolist()) == allowed
+
+
+@pytest.mark.parametrize("batch_size", [1, 2])
+def test_verified_tokens_commit_during_graph_replay(
+    guide: tuple[CapturableTreeGuidedDecoder, list[str]], batch_size: int
+) -> None:
+    decoder, vocabulary = guide
+    logits = torch.zeros((6 * batch_size, 32), device="cuda")
+    accepted = torch.zeros((batch_size, 3), dtype=torch.int32, device="cuda")
+    counts = torch.full((batch_size,), 3, dtype=torch.int32, device="cuda")
+    dummy = LlmRequest(
+        request_id=99,
+        seq_slot=0,
+        max_new_tokens=16,
+        input_tokens=[0],
+        sampling_config=SamplingConfig(1),
+        is_streaming=False,
+    )
+    dummy.state = LlmRequestState.GENERATION_IN_PROGRESS
+    _generation(decoder, [dummy])
+    decoder.execute(logits)
+    decoder.commit_tree_tokens(accepted, counts)
+    torch.cuda.synchronize()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        logits.zero_()
+        decoder.execute(logits)
+        decoder.commit_tree_tokens(accepted, counts)
+    for iteration, branch in enumerate(("bcf", "def")):
+        requests = [
+            _request(decoder, "a(bc|de)f", slot, 10 + iteration * 2 + slot)
+            for slot in range(batch_size)
+        ]
+        _generation(decoder, requests)
+        accepted.copy_(torch.tensor(
+            [[vocabulary.index(token) for token in branch]] * batch_size,
+            dtype=torch.int32,
+            device="cuda",
+        ))
+        graph.replay()
+        torch.cuda.synchronize()
+        for row, request in enumerate(requests):
+            matcher = decoder.grammar_matchers[request.py_seq_slot]
+            matcher.fill_next_token_bitmask(decoder.bitmask_host, row)
+            assert request.get_tokens(0) == [0, 1]
+        decoder.token_mask_host[:batch_size].fill_(1)
+        decoder.copy_bitmask(num_bitmask_tokens=batch_size)
+        next_logits = torch.zeros((batch_size, 32), device="cuda")
+        decoder.apply_bitmask(next_logits, num_bitmask_tokens=batch_size)
+        for row in next_logits.isfinite().cpu():
+            assert set(row.nonzero().flatten().tolist()) == {vocabulary.index("f")}

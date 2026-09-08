@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
 from dataclasses import dataclass
 from queue import Queue
@@ -699,15 +714,17 @@ class CapturableTreeGuidedDecoder(CapturableGuidedDecoder):
     def commit_tree_tokens(self, accepted_tokens: torch.Tensor,
                            num_accepted_tokens: torch.Tensor) -> None:
         """Commit int32 [batch, path] tokens with int32 [batch] accepted lengths."""
-        batch_size, max_path_len = accepted_tokens.shape
-        self.new_tokens[:max_path_len, :batch_size].copy_(accepted_tokens.T,
-                                                          non_blocking=True)
+        batch_size = accepted_tokens.size(0)
+        # A capacity-strided slice can require pageable staging during capture.
+        tokens_host = self.new_tokens.view(-1)[:accepted_tokens.numel()].view_as(
+            accepted_tokens)
+        tokens_host.copy_(accepted_tokens, non_blocking=True)
         self.num_accepted_tokens[:batch_size].copy_(num_accepted_tokens,
                                                     non_blocking=True)
-        self._commit_tree_tokens()
+        self._commit_tree_tokens(tokens_host)
 
     @hostfunc
-    def _commit_tree_tokens(self) -> None:
+    def _commit_tree_tokens(self, tokens_host: torch.Tensor) -> None:
         for i, req in enumerate(self.requests_hostfunc):
             if req.guided_decoding_params is None or req.seq_slot is None:
                 continue
@@ -716,7 +733,7 @@ class CapturableTreeGuidedDecoder(CapturableGuidedDecoder):
                 continue
             # The last verifier output is consumed as the next target input.
             count = int(self.num_accepted_tokens[i]) - 1
-            for tid in self.new_tokens[:count, i].tolist():
+            for tid in tokens_host[i, :count].tolist():
                 if matcher.is_terminated():
                     break
                 if not matcher.accept_token(tid):
