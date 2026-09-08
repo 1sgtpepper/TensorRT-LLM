@@ -13,11 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: Check guided tree fix
+name: Check guided decoder review fixes
 
 on:
   push:
-    branches: [ci/guided-tree-fix]
+    branches: [validation/guided-review-ci]
     paths: [.github/workflows/fix-candidates.yml]
   workflow_dispatch:
 
@@ -26,6 +26,14 @@ permissions:
 
 jobs:
   release-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - revision: 34836d506de2223448b5227d61f4d422ca74199a
+            test: test_guided_recompute.py
+          - revision: 7c30b1283d2e90e0a0aeee2cf88022143f697ddc
+            test: test_guided_tree.py
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
@@ -34,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: d7fdab967afed08a86b3816c89cec39c2ee65ab4
+          ref: ${{ matrix.revision }}
           fetch-depth: 1
       - uses: actions/setup-python@v5
         with:
@@ -45,14 +53,14 @@ jobs:
           key: guided-recompute-hooks-py312-${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Run repository release checks on changed files
         run: |
-          test "$(git rev-parse HEAD)" = d7fdab967afed08a86b3816c89cec39c2ee65ab4
+          test "$(git rev-parse HEAD)" = ${{ matrix.revision }}
           git fetch --depth=1 origin 17803f6c0cbe8d9fed3ccf46a295b867e3493d3e
           git diff --name-only 17803f6c0cbe8d9fed3ccf46a295b867e3493d3e HEAD > /tmp/changed-files.txt
           python -u scripts/release_check.py --files-from /tmp/changed-files.txt
           git diff --exit-code
       - name: Verify the GPU regression is selected by CI
         run: |
-          python scripts/test_to_stage_mapping.py --tests unittest/_torch/test_guided_tree.py > /tmp/tree-stages.txt
+          python scripts/test_to_stage_mapping.py --tests unittest/_torch/${{ matrix.test }} > /tmp/tree-stages.txt
           cat /tmp/tree-stages.txt
           test -s /tmp/tree-stages.txt
           grep -q A10-PyTorch /tmp/tree-stages.txt
