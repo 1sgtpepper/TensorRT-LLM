@@ -682,12 +682,14 @@ class MTPEagleDynamicTreeWorker(MTPEagleWorker):
         num_gens = batch_size - num_contexts
         raw_logits = logits
 
-        self._execute_guided_decoder_if_present(logits)
+        self._execute_guided_decoder_if_present(logits, attn_metadata)
 
         # (a) Verify previous tree (greedy). Also relocates accepted KV.
         accepted_tokens, num_accepted_tokens = self.sample_and_accept_draft_tokens(
             input_ids, logits, spec_metadata, attn_metadata
         )
+        if self.guided_decoder is not None:
+            self.guided_decoder.commit_tree_tokens(accepted_tokens, num_accepted_tokens)
         if num_gens > 0:
             self._relocate_kv_eagerly(attn_metadata, batch_size)
 

@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
 from dataclasses import dataclass
 from queue import Queue
@@ -259,22 +274,7 @@ class GuidedDecoder:
                     matcher.fill_next_token_bitmask(self.bitmask_host, offset)
                     self.token_mask_host[offset] = 1
                     self.num_guided_tokens[slot] += 1
-                    # Process draft tokens. Bound by the layout's draft length:
-                    # the new_tokens buffer always holds the static max, but only
-                    # `max_num_draft_tokens` slots are reserved this iteration.
-                    for i, tid in enumerate(
-                            req.draft_tokens[:requests.max_num_draft_tokens],
-                            1):
-                        accepted = matcher.accept_token(tid)
-                        if not accepted:
-                            break
-                        self.num_advanced_tokens[slot] += 1
-                        if matcher.is_terminated():
-                            break
-                        matcher.fill_next_token_bitmask(self.bitmask_host,
-                                                        offset + i)
-                        self.token_mask_host[offset + i] = 1
-                        self.num_guided_tokens[slot] += 1
+                    self._fill_draft_bitmasks(req, offset, requests)
 
                 if req.is_draft:
                     assert len(req.draft_tokens) == 0
@@ -289,6 +289,23 @@ class GuidedDecoder:
                 )
 
         return failed_requests
+
+    def _fill_draft_bitmasks(self, req: GuidedRequest, offset: int,
+                             requests: GuidedRequests) -> None:
+        slot = req.seq_slot
+        matcher = self.grammar_matchers[slot]
+        # The token buffer holds the static maximum; the layout reserves only
+        # the current runtime draft length.
+        for i, tid in enumerate(
+                req.draft_tokens[:requests.max_num_draft_tokens], 1):
+            if not matcher.accept_token(tid):
+                break
+            self.num_advanced_tokens[slot] += 1
+            if matcher.is_terminated():
+                break
+            matcher.fill_next_token_bitmask(self.bitmask_host, offset + i)
+            self.token_mask_host[offset + i] = 1
+            self.num_guided_tokens[slot] += 1
 
     def _copy_bitmask(self,
                       requests: GuidedRequests,
@@ -603,3 +620,123 @@ class CapturableGuidedDecoder(GuidedDecoder):
                            num_bitmask_tokens=len(self.requests))
 
         return failed_requests
+
+
+class CapturableTreeGuidedDecoder(CapturableGuidedDecoder):
+    """Guide each tree node from its ancestor path, then commit verified tokens."""
+
+    def __init__(self,
+                 guided_decoding_config: GuidedDecodingConfig,
+                 max_num_sequences: int,
+                 vocab_size_padded: int,
+                 max_num_draft_tokens: int = 0,
+                 rank: int = 0) -> None:
+        super().__init__(guided_decoding_config, max_num_sequences,
+                         vocab_size_padded, max_num_draft_tokens, rank)
+        self.retrieve_host = torch.empty(max_num_sequences,
+                                         max_num_draft_tokens + 1,
+                                         3,
+                                         dtype=torch.int32,
+                                         pin_memory=prefer_pinned())
+        self.tree_valid_host = torch.empty(max_num_sequences,
+                                           dtype=torch.bool,
+                                           pin_memory=prefer_pinned())
+
+    def _fill_draft_bitmasks(self, req: GuidedRequest, offset: int,
+                             requests: GuidedRequests) -> None:
+        if not req.is_generation_in_progress_state or requests.max_num_draft_tokens == 0:
+            return
+        index = (offset -
+                 requests.num_contexts) // (requests.max_num_draft_tokens + 1)
+        if not self.tree_valid_host[index]:
+            return
+        retrieve = self.retrieve_host[index].tolist()
+        matcher = self.grammar_matchers[req.seq_slot]
+        node = retrieve[0][1]
+        siblings = []
+        # Each stack entry owns one accepted edge. Leaving it restores the
+        # parent's matcher, including after a rejected or terminal sibling.
+        try:
+            while node != -1 or siblings:
+                if node == -1:
+                    matcher.rollback(1)
+                    node = siblings.pop()
+                    continue
+                row, child, sibling = retrieve[node]
+                if not matcher.accept_token(req.draft_tokens[node - 1]):
+                    node = sibling
+                    continue
+                siblings.append(sibling)
+                node = -1
+                if not matcher.is_terminated():
+                    matcher.fill_next_token_bitmask(self.bitmask_host,
+                                                    offset + row)
+                    self.token_mask_host[offset + row] = 1
+                    self.num_guided_tokens[req.seq_slot] += 1
+                    node = child
+        finally:
+            if siblings:
+                matcher.rollback(len(siblings))
+
+    @hostfunc
+    def build(self, num_tree_rows: int = 0) -> List[Tuple[int, str]]:
+        # A captured graph may copy padded rows beyond the current real batch.
+        self.token_mask_host[self.requests_hostfunc.num_bitmask_tokens:].zero_()
+        self.tree_valid_host[num_tree_rows:].zero_()
+        return self._build(self.requests_hostfunc)
+
+    def execute(
+            self,
+            logits: torch.Tensor,
+            d2t: Optional[torch.Tensor] = None,
+            retrieve: Optional[torch.Tensor] = None,
+            tree_valid: Optional[torch.Tensor] = None) -> List[Tuple[int, str]]:
+        # Tree gathers are on the main stream, after input preprocessing.
+        self.token_event.record()
+        with torch.cuda.stream(self.stream):
+            torch.cuda.current_stream().wait_event(self.token_event)
+            num_tree_rows = 0 if retrieve is None else retrieve.size(0)
+            if retrieve is not None:
+                self.retrieve_host[:num_tree_rows].copy_(retrieve,
+                                                         non_blocking=True)
+                self.tree_valid_host[:num_tree_rows].copy_(tree_valid,
+                                                           non_blocking=True)
+            self.fetch_batch()
+            self.init_disagg_gen_requests()
+            failed_requests = self.build(num_tree_rows)
+            self.copy_bitmask(num_bitmask_tokens=logits.size(0))
+            self.bitmask_event.record()
+
+        torch.cuda.current_stream().wait_event(self.bitmask_event)
+        self.apply_bitmask(logits, d2t=d2t, num_bitmask_tokens=logits.size(0))
+        return failed_requests
+
+    def commit_tree_tokens(self, accepted_tokens: torch.Tensor,
+                           num_accepted_tokens: torch.Tensor) -> None:
+        """Commit int32 [batch, path] tokens with int32 [batch] accepted lengths."""
+        batch_size = accepted_tokens.size(0)
+        # A capacity-strided slice can require pageable staging during capture.
+        tokens_host = self.new_tokens.view(
+            -1)[:accepted_tokens.numel()].view_as(accepted_tokens)
+        tokens_host.copy_(accepted_tokens, non_blocking=True)
+        self.num_accepted_tokens[:batch_size].copy_(num_accepted_tokens,
+                                                    non_blocking=True)
+        self._commit_tree_tokens(tokens_host)
+
+    @hostfunc
+    def _commit_tree_tokens(self, tokens_host: torch.Tensor) -> None:
+        for i, req in enumerate(self.requests_hostfunc):
+            if req.guided_decoding_params is None or req.seq_slot is None:
+                continue
+            matcher = self.grammar_matchers[req.seq_slot]
+            if matcher is None:
+                continue
+            # The last verifier output is consumed as the next target input.
+            count = int(self.num_accepted_tokens[i]) - 1
+            for tid in tokens_host[i, :count].tolist():
+                if matcher.is_terminated():
+                    break
+                if not matcher.accept_token(tid):
+                    raise ValueError(
+                        f"Request {req.request_id} at slot {req.seq_slot} failed to accept verified token: {tid}."
+                    )

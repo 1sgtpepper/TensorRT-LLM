@@ -35,6 +35,7 @@ from ..attention.backends.interface import AttentionRuntimeFeatures
 from ..distributed import Distributed
 from ..speculative import (get_num_extra_kv_tokens, get_spec_drafter,
                            get_spec_resource_manager)
+from ..speculative.utils import _is_effective_dynamic_tree
 from ..virtual_memory import scope as virtual_memory_scope
 from ._util import (KvCacheCreator, _adjust_torch_mem_fraction,
                     create_py_executor_instance, instantiate_sampler, is_mla,
@@ -44,7 +45,8 @@ from .config_utils import (is_hybrid_linear, is_minimax_m3,
                            uses_vswa_kv_cache_layout)
 from .connectors.kv_cache_connector import KvCacheConnectorManager
 from .dwdp import DwdpManager
-from .guided_decoder import CapturableGuidedDecoder, GuidedDecoder
+from .guided_decoder import (CapturableGuidedDecoder,
+                             CapturableTreeGuidedDecoder, GuidedDecoder)
 from .model_engine import PyTorchModelEngine
 from .model_loader import ModelLoader, _construct_checkpoint_loader
 from .py_executor import PyExecutor
@@ -779,8 +781,15 @@ def create_py_executor(
                 elif spec_config.spec_dec_mode.support_capturable_guided_decoder(
                 ):
                     # CapturableGuidedDecoder is applicable to one-model speculative decoding.
+                    tree_guidance = (
+                        spec_config.spec_dec_mode.is_eagle3_one_model()
+                        and _is_effective_dynamic_tree(spec_config)) or (
+                            spec_config.spec_dec_mode.is_mtp_eagle_one_model()
+                            and spec_config.use_dynamic_tree)
+                    decoder_type = (CapturableTreeGuidedDecoder if tree_guidance
+                                    else CapturableGuidedDecoder)
                     success = model_engine.set_guided_decoder(
-                        CapturableGuidedDecoder(**kwargs))
+                        decoder_type(**kwargs))
                     if not success:
                         raise ValueError(
                             f"Failed to set guided decoder for speculative decoding mode: {spec_config.spec_dec_mode.name}."
