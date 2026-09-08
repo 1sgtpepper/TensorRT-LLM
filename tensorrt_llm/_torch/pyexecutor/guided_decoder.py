@@ -716,8 +716,8 @@ class CapturableTreeGuidedDecoder(CapturableGuidedDecoder):
         """Commit int32 [batch, path] tokens with int32 [batch] accepted lengths."""
         batch_size = accepted_tokens.size(0)
         # A capacity-strided slice can require pageable staging during capture.
-        tokens_host = self.new_tokens.view(-1)[:accepted_tokens.numel()].view_as(
-            accepted_tokens)
+        tokens_host = self.new_tokens.view(
+            -1)[:accepted_tokens.numel()].view_as(accepted_tokens)
         tokens_host.copy_(accepted_tokens, non_blocking=True)
         self.num_accepted_tokens[:batch_size].copy_(num_accepted_tokens,
                                                     non_blocking=True)

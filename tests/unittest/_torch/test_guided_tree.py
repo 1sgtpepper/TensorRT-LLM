@@ -304,11 +304,13 @@ def test_verified_tokens_commit_during_graph_replay(
             for slot in range(batch_size)
         ]
         _generation(decoder, requests)
-        accepted.copy_(torch.tensor(
-            [[vocabulary.index(token) for token in branch]] * batch_size,
-            dtype=torch.int32,
-            device="cuda",
-        ))
+        accepted.copy_(
+            torch.tensor(
+                [[vocabulary.index(token) for token in branch]] * batch_size,
+                dtype=torch.int32,
+                device="cuda",
+            )
+        )
         graph.replay()
         torch.cuda.synchronize()
         for row, request in enumerate(requests):
